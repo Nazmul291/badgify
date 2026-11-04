@@ -45,10 +45,17 @@ export default async function handleRequest(
         },
         onError(error) {
           responseStatusCode = 500;
-          console.error(error);
+          // Client disconnects (reloads, redirects, cancelled prefetches) surface
+          // as "destination stream closed early" — not a real render error.
+          if (!request.signal.aborted) {
+            console.error(error);
+          }
         },
       }
     );
+
+    // Stop rendering as soon as the client goes away
+    request.signal.addEventListener("abort", () => abort(), { once: true });
 
     // Automatically timeout the React renderer after 6 seconds, which ensures
     // React has enough time to flush down the rejected boundary contents
