@@ -4,29 +4,80 @@
     assign badge_product = block.settings.product
   endif
 
-  assign badge = badge_product.metafields.custom_badges.active_badge.value
--%}
+  assign manual_badge = badge_product.metafields.custom_badges.active_badge.value
+  assign automation = app.metafields.badgify.automation.value
+  assign variant = badge_product.selected_or_first_available_variant
 
-{%- if badge != blank and badge.label.value != blank -%}
-  {%- liquid
-    assign bg_color = badge.bg_color.value | default: block.settings.fallback_bg_color
-    assign text_color = badge.text_color.value | default: block.settings.fallback_text_color
-    assign radius = badge.border_radius.value | default: block.settings.fallback_border_radius
-    assign font_size = badge.font_size.value | default: block.settings.fallback_font_size
-    assign padding_x = badge.padding_x.value | default: 8
-    assign padding_y = badge.padding_y.value | default: 4
+  assign badge_type = ''
+  assign badge_label = ''
+  assign custom_css = ''
 
-    if block.settings.layout == 'overlay'
-      assign position_class = 'badgify--' | append: block.settings.corner
-    else
-      assign position_class = 'badgify--' | append: block.settings.alignment
-    endif
+  # 1. A manually assigned badge always wins.
+  if manual_badge != blank and manual_badge.label.value != blank
+    assign badge_type = 'manual'
+    assign badge_label = manual_badge.label.value | escape
+    assign bg_color = manual_badge.bg_color.value | default: block.settings.fallback_bg_color
+    assign text_color = manual_badge.text_color.value | default: block.settings.fallback_text_color
+    assign radius = manual_badge.border_radius.value | default: block.settings.fallback_border_radius
+    assign font_size = manual_badge.font_size.value | default: block.settings.fallback_font_size
+    assign padding_x = manual_badge.padding_x.value | default: 8
+    assign padding_y = manual_badge.padding_y.value | default: 4
 
     # Only allow CSS declarations: stripping braces and angle brackets keeps
     # merchant CSS inside the badge rule and out of the surrounding markup.
-    assign custom_css = badge.css_custom.value | remove: '<' | remove: '>' | remove: '{' | remove: '}' | strip
-  -%}
+    assign custom_css = manual_badge.css_custom.value | remove: '<' | remove: '>' | remove: '{' | remove: '}' | strip
 
+  # 2. Otherwise the first matching automated rule: Sold out > Sale > Low stock > New.
+  elsif automation != blank
+    if automation.sold_out.enabled and badge_product.available == false
+      assign badge_type = 'sold_out'
+      assign badge_label = automation.sold_out.label | escape
+    endif
+
+    if badge_type == '' and automation.sale.enabled and variant.compare_at_price > variant.price
+      assign saved = variant.compare_at_price | minus: variant.price
+      assign percent = saved | times: 100.0 | divided_by: variant.compare_at_price | round
+      assign amount = saved | money
+      assign badge_type = 'sale'
+      assign badge_label = automation.sale.label | escape | replace: '{percent}', percent | replace: '{amount}', amount
+    endif
+
+    if badge_type == '' and automation.low_stock.enabled and variant.inventory_management == 'shopify'
+      if variant.inventory_quantity > 0 and variant.inventory_quantity <= automation.low_stock.threshold
+        assign badge_type = 'low_stock'
+        assign badge_label = automation.low_stock.label | escape | replace: '{count}', variant.inventory_quantity
+      endif
+    endif
+
+    if badge_type == '' and automation.new_arrival.enabled
+      assign now_seconds = 'now' | date: '%s' | plus: 0
+      assign created_seconds = badge_product.created_at | date: '%s' | plus: 0
+      assign age_days = now_seconds | minus: created_seconds | divided_by: 86400
+      if age_days < automation.new_arrival.days
+        assign badge_type = 'new_arrival'
+        assign badge_label = automation.new_arrival.label | escape
+      endif
+    endif
+
+    if badge_type != ''
+      assign rule = automation[badge_type]
+      assign bg_color = rule.bg_color | default: block.settings.fallback_bg_color
+      assign text_color = rule.text_color | default: block.settings.fallback_text_color
+      assign radius = automation.style.border_radius | default: block.settings.fallback_border_radius
+      assign font_size = automation.style.font_size | default: block.settings.fallback_font_size
+      assign padding_x = automation.style.padding_x | default: 8
+      assign padding_y = automation.style.padding_y | default: 4
+    endif
+  endif
+
+  if block.settings.layout == 'overlay'
+    assign position_class = 'badgify--' | append: block.settings.corner
+  else
+    assign position_class = 'badgify--' | append: block.settings.alignment
+  endif
+-%}
+
+{%- if badge_type != '' -%}
   {%- if custom_css != blank -%}
     <style>
       #badgify-{{ block.id }} .badgify-badge { {{ custom_css }} }
@@ -36,6 +87,7 @@
   <div
     id="badgify-{{ block.id }}"
     class="badgify badgify--{{ block.settings.layout }} {{ position_class }}"
+    data-badge-type="{{ badge_type }}"
     style="
       --badgify-bg: {{ bg_color }};
       --badgify-color: {{ text_color }};
@@ -49,7 +101,7 @@
     "
     {{ block.shopify_attributes }}
   >
-    <span class="badgify-badge">{{ badge.label.value | escape }}</span>
+    <span class="badgify-badge badgify-badge--{{ badge_type }}">{{ badge_label }}</span>
   </div>
 {%- elsif request.design_mode -%}
   <p class="badgify-editor-hint" {{ block.shopify_attributes }}>

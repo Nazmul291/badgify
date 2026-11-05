@@ -32,3 +32,12 @@ export interface BadgeProduct {
   id: string;
   title: string;
 }
+
+export const BADGE_NUMBER_LIMITS = {
+  borderRadius: { min: 0, max: 999 },
+  fontSize: { min: 8, max: 72 },
+  paddingX: { min: 0, max: 64 },
+  paddingY: { min: 0, max: 64 },
+} as const;
+
+export const HEX_COLOR = /^#[0-9a-f]{6}$/i;

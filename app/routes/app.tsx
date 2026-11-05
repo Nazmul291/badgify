@@ -20,6 +20,7 @@ export default function App() {
     <AppProvider apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Badges</s-link>
+        <s-link href="/app/automations">Automated badges</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>
