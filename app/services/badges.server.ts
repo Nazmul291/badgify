@@ -243,7 +243,12 @@ const BADGE_PRODUCTS = `#graphql
     }
   }`;
 
-/** Products whose `custom_badges.active_badge` metafield points at this badge. */
+// The API returns the `$app:badgify` namespace resolved to `app--{appId}--badgify`.
+const RESOLVED_BADGE_NAMESPACE = new RegExp(
+  `^app--\\d+--${BADGE_NAMESPACE.replace("$app:", "")}$`,
+);
+
+/** Products whose `$app:badgify.active_badge` metafield points at this badge. */
 export async function listBadgeProducts(
   admin: AdminApiContext,
   badgeId: string,
@@ -257,7 +262,7 @@ export async function listBadgeProducts(
   const products = (referencedBy?.nodes ?? [])
     .filter(
       (node: { namespace: string; key: string; referencer: { id?: string } }) =>
-        node.namespace === BADGE_NAMESPACE &&
+        RESOLVED_BADGE_NAMESPACE.test(node.namespace) &&
         node.key === BADGE_KEY &&
         node.referencer?.id,
     )

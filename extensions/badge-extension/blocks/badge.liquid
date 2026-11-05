@@ -4,7 +4,8 @@
     assign badge_product = block.settings.product
   endif
 
-  assign manual_badge = badge_product.metafields.custom_badges.active_badge.value
+  # `$app:badgify` resolves to this app's reserved namespace.
+  assign manual_badge = badge_product.metafields['$app:badgify'].active_badge.value
   assign automation = app.metafields.badgify.automation.value
   assign variant = badge_product.selected_or_first_available_variant
 

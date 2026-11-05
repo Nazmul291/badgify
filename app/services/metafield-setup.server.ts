@@ -1,7 +1,10 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 
-export const BADGE_TYPE = "badge_definition";
-export const BADGE_NAMESPACE = "custom_badges";
+// App-reserved ($app) definitions: only Badgify can change their structure
+// and data, so other apps, staff and translations can't alter the labels and
+// CSS the storefront block renders. Merchants manage badges through the app.
+export const BADGE_TYPE = "$app:badge_definition";
+export const BADGE_NAMESPACE = "$app:badgify";
 export const BADGE_KEY = "active_badge";
 
 interface UserError {
@@ -103,7 +106,7 @@ async function createMetaobjectDefinition(admin: AdminApiContext) {
         name: "Badge",
         type: BADGE_TYPE,
         displayNameKey: "title",
-        access: { storefront: "PUBLIC_READ" },
+        access: { admin: "MERCHANT_READ", storefront: "PUBLIC_READ" },
         fieldDefinitions: BADGE_FIELD_DEFINITIONS,
       },
     },
@@ -133,7 +136,7 @@ async function createMetafieldDefinition(
         key: BADGE_KEY,
         ownerType: "PRODUCT",
         type: "metaobject_reference",
-        access: { storefront: "PUBLIC_READ" },
+        access: { admin: "MERCHANT_READ", storefront: "PUBLIC_READ" },
         validations: [
           { name: "metaobject_definition_id", value: metaobjectDefinitionId },
         ],
@@ -152,8 +155,8 @@ async function createMetafieldDefinition(
 }
 
 /**
- * Idempotently creates the `badge_definition` metaobject definition and the
- * `custom_badges.active_badge` product metafield definition. Existing
+ * Idempotently creates the `$app:badge_definition` metaobject definition and
+ * the `$app:badgify.active_badge` product metafield definition. Existing
  * definitions are left untouched, so this is safe to call on every load.
  */
 export async function ensureBadgeDefinitions(
