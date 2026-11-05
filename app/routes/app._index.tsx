@@ -478,6 +478,7 @@ export default function BadgesPage() {
   const [editing, setEditing] = useState<Badge | null | undefined>(undefined);
   const [pendingDelete, setPendingDelete] = useState<Badge | null>(null);
 
+  const isEditorOpen = editing !== undefined;
   const busy = fetcher.state !== "idle";
   const submittingIntent = busy ? fetcher.formData?.get("intent") : null;
 
@@ -521,18 +522,23 @@ export default function BadgesPage() {
 
   return (
     <s-page heading="Badges">
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        onClick={() => setEditing(null)}
-      >
-        Create badge
-      </s-button>
-      <s-button slot="secondary-actions" onClick={unassign}>
-        Remove badges from products
-      </s-button>
+      {/* Page actions only make sense from the list; hide them while editing. */}
+      {!isEditorOpen && (
+        <>
+          <s-button
+            slot="primary-action"
+            variant="primary"
+            onClick={() => setEditing(null)}
+          >
+            Create badge
+          </s-button>
+          <s-button slot="secondary-actions" onClick={unassign}>
+            Remove badges from products
+          </s-button>
+        </>
+      )}
 
-      {editing !== undefined && (
+      {isEditorOpen ? (
         <BadgeEditor
           key={editing?.id ?? "new"}
           badge={editing}
@@ -550,9 +556,7 @@ export default function BadgesPage() {
             })
           }
         />
-      )}
-
-      {badges.length === 0 ? (
+      ) : badges.length === 0 ? (
         <s-section>
           <s-stack gap="base" alignItems="center">
             <s-heading>Create your first badge</s-heading>
