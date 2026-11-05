@@ -76,7 +76,7 @@ const RULE_INFO: Record<RuleKey, { title: string; description: string; tokens?: 
   },
   new_arrival: {
     title: "New arrival",
-    description: "Shown for products created within this many days.",
+    description: "Shown for products published within this many days.",
   },
 };
 

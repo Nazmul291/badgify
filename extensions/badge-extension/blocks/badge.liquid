@@ -49,10 +49,11 @@
       endif
     endif
 
-    if badge_type == '' and automation.new_arrival.enabled
+    # Published, not created: products often sit in draft before launch.
+    if badge_type == '' and automation.new_arrival.enabled and badge_product.published_at != blank
       assign now_seconds = 'now' | date: '%s' | plus: 0
-      assign created_seconds = badge_product.created_at | date: '%s' | plus: 0
-      assign age_days = now_seconds | minus: created_seconds | divided_by: 86400
+      assign published_seconds = badge_product.published_at | date: '%s' | plus: 0
+      assign age_days = now_seconds | minus: published_seconds | divided_by: 86400
       if age_days < automation.new_arrival.days
         assign badge_type = 'new_arrival'
         assign badge_label = automation.new_arrival.label | escape
