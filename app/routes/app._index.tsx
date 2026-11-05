@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -21,7 +20,8 @@ import {
   saveBadge,
   unassignBadge,
 } from "../services/badges.server";
-import { DEFAULT_BADGE } from "../models/badge";
+import { BADGE_NUMBER_LIMITS, DEFAULT_BADGE, HEX_COLOR } from "../models/badge";
+import { BadgePreview } from "../components/BadgePreview";
 import type { Badge, BadgeInput, BadgeProduct } from "../models/badge";
 import type { loader as badgeProductsLoader } from "./app.badge-products";
 
@@ -31,15 +31,8 @@ type ActionResult =
   | { ok: true; intent: Intent; message: string }
   | { ok: false; intent: Intent; error: string };
 
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const DELETE_MODAL_ID = "delete-badge-modal";
-
-const NUMBER_LIMITS = {
-  borderRadius: { min: 0, max: 999 },
-  fontSize: { min: 8, max: 72 },
-  paddingX: { min: 0, max: 64 },
-  paddingY: { min: 0, max: 64 },
-} as const;
+const NUMBER_LIMITS = BADGE_NUMBER_LIMITS;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticateWithBilling(request);
@@ -155,24 +148,6 @@ export const action = async ({
     throw error;
   }
 };
-
-function badgeStyle(badge: BadgeInput): CSSProperties {
-  return {
-    display: "inline-block",
-    backgroundColor: badge.bgColor,
-    color: badge.textColor,
-    borderRadius: `${badge.borderRadius}px`,
-    fontSize: `${badge.fontSize}px`,
-    padding: `${badge.paddingY}px ${badge.paddingX}px`,
-    fontWeight: 600,
-    lineHeight: 1.2,
-    whiteSpace: "nowrap",
-  };
-}
-
-function BadgePreview({ badge }: { badge: BadgeInput }) {
-  return <span style={badgeStyle(badge)}>{badge.label || "Badge"}</span>;
-}
 
 const FIELD_NAMES: (keyof BadgeInput)[] = [
   "title",
@@ -424,7 +399,7 @@ function BadgeEditor({
           <s-box padding="large" background="subdued" borderRadius="base">
             <s-stack gap="base" alignItems="center">
               <s-text color="subdued">Live preview</s-text>
-              <BadgePreview badge={preview} />
+              <BadgePreview label={preview.label} style={preview} />
             </s-stack>
           </s-box>
         </s-grid>
@@ -460,6 +435,7 @@ export default function BadgesPage() {
   const [editing, setEditing] = useState<Badge | null | undefined>(undefined);
   const [pendingDelete, setPendingDelete] = useState<Badge | null>(null);
 
+  const isEditorOpen = editing !== undefined;
   const busy = fetcher.state !== "idle";
   const submittingIntent = busy ? fetcher.formData?.get("intent") : null;
 
@@ -503,18 +479,23 @@ export default function BadgesPage() {
 
   return (
     <s-page heading="Badges">
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        onClick={() => setEditing(null)}
-      >
-        Create badge
-      </s-button>
-      <s-button slot="secondary-actions" onClick={unassign}>
-        Remove badges from products
-      </s-button>
+      {/* Page actions only make sense from the list; hide them while editing. */}
+      {!isEditorOpen && (
+        <>
+          <s-button
+            slot="primary-action"
+            variant="primary"
+            onClick={() => setEditing(null)}
+          >
+            Create badge
+          </s-button>
+          <s-button slot="secondary-actions" onClick={unassign}>
+            Remove badges from products
+          </s-button>
+        </>
+      )}
 
-      {editing !== undefined && (
+      {isEditorOpen ? (
         <BadgeEditor
           key={editing?.id ?? "new"}
           badge={editing}
@@ -532,9 +513,7 @@ export default function BadgesPage() {
             })
           }
         />
-      )}
-
-      {badges.length === 0 ? (
+      ) : badges.length === 0 ? (
         <s-section>
           <s-stack gap="base" alignItems="center">
             <s-heading>Create your first badge</s-heading>
@@ -559,7 +538,7 @@ export default function BadgesPage() {
               {badges.map((badge) => (
                 <s-table-row key={badge.id}>
                   <s-table-cell>
-                    <BadgePreview badge={badge} />
+                    <BadgePreview label={badge.label} style={badge} />
                   </s-table-cell>
                   <s-table-cell>{badge.title}</s-table-cell>
                   <s-table-cell>
