@@ -1,0 +1,180 @@
+{%- liquid
+  assign badge_product = product
+  if block.settings.product != blank
+    assign badge_product = block.settings.product
+  endif
+
+  assign badge = badge_product.metafields.custom_badges.active_badge.value
+-%}
+
+{%- if badge != blank and badge.label.value != blank -%}
+  {%- liquid
+    assign bg_color = badge.bg_color.value | default: block.settings.fallback_bg_color
+    assign text_color = badge.text_color.value | default: block.settings.fallback_text_color
+    assign radius = badge.border_radius.value | default: block.settings.fallback_border_radius
+    assign font_size = badge.font_size.value | default: block.settings.fallback_font_size
+    assign padding_x = badge.padding_x.value | default: 8
+    assign padding_y = badge.padding_y.value | default: 4
+
+    if block.settings.layout == 'overlay'
+      assign position_class = 'badgify--' | append: block.settings.corner
+    else
+      assign position_class = 'badgify--' | append: block.settings.alignment
+    endif
+
+    # Only allow CSS declarations: stripping braces and angle brackets keeps
+    # merchant CSS inside the badge rule and out of the surrounding markup.
+    assign custom_css = badge.css_custom.value | remove: '<' | remove: '>' | remove: '{' | remove: '}' | strip
+  -%}
+
+  {%- if custom_css != blank -%}
+    <style>
+      #badgify-{{ block.id }} .badgify-badge { {{ custom_css }} }
+    </style>
+  {%- endif -%}
+
+  <div
+    id="badgify-{{ block.id }}"
+    class="badgify badgify--{{ block.settings.layout }} {{ position_class }}"
+    style="
+      --badgify-bg: {{ bg_color }};
+      --badgify-color: {{ text_color }};
+      --badgify-radius: {{ radius }}px;
+      --badgify-font-size: {{ font_size }}px;
+      --badgify-px: {{ padding_x }}px;
+      --badgify-py: {{ padding_y }}px;
+      --badgify-offset-x: {{ block.settings.offset_x }}px;
+      --badgify-offset-y: {{ block.settings.offset_y }}px;
+      --badgify-spacing: {{ block.settings.spacing }}px;
+    "
+    {{ block.shopify_attributes }}
+  >
+    <span class="badgify-badge">{{ badge.label.value | escape }}</span>
+  </div>
+{%- elsif request.design_mode -%}
+  <p class="badgify-editor-hint" {{ block.shopify_attributes }}>
+    {{ 'badgify.editor_hint' | t }}
+  </p>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Product badge",
+  "target": "section",
+  "stylesheet": "badgify.css",
+  "settings": [
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product",
+      "autofill": true,
+      "info": "Defaults to the product on the current page."
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Position",
+      "options": [
+        { "value": "inline", "label": "Inline" },
+        { "value": "overlay", "label": "Overlay" }
+      ],
+      "default": "inline",
+      "info": "Overlay floats the badge over nearby content without taking up space."
+    },
+    {
+      "type": "select",
+      "id": "alignment",
+      "label": "Alignment (inline)",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "left"
+    },
+    {
+      "type": "range",
+      "id": "spacing",
+      "label": "Vertical spacing (inline)",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "select",
+      "id": "corner",
+      "label": "Corner (overlay)",
+      "options": [
+        { "value": "top-left", "label": "Top left" },
+        { "value": "top-right", "label": "Top right" },
+        { "value": "bottom-left", "label": "Bottom left" },
+        { "value": "bottom-right", "label": "Bottom right" }
+      ],
+      "default": "top-left"
+    },
+    {
+      "type": "range",
+      "id": "offset_x",
+      "label": "Horizontal offset (overlay)",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "offset_y",
+      "label": "Vertical offset (overlay)",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "header",
+      "content": "Fallback style",
+      "info": "Used when a badge doesn't define its own value."
+    },
+    {
+      "type": "color",
+      "id": "fallback_bg_color",
+      "label": "Background color",
+      "default": "#D72C0D"
+    },
+    {
+      "type": "color",
+      "id": "fallback_text_color",
+      "label": "Text color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "fallback_border_radius",
+      "label": "Border radius",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "unit": "px",
+      "default": 4
+    },
+    {
+      "type": "range",
+      "id": "fallback_font_size",
+      "label": "Font size",
+      "min": 8,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    }
+  ]
+}
+{% endschema %}
