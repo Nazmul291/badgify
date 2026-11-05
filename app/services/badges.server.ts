@@ -6,7 +6,7 @@ import {
   ShopifyUserErrors,
 } from "./metafield-setup.server";
 import { DEFAULT_BADGE } from "../models/badge";
-import type { Badge, BadgeInput } from "../models/badge";
+import type { Badge, BadgeInput, BadgeProduct } from "../models/badge";
 
 // metafieldsSet and metafieldsDelete accept at most 25 metafields per call.
 const METAFIELD_BATCH_SIZE = 25;
@@ -220,4 +220,51 @@ export async function unassignBadge(admin: AdminApiContext, productIds: string[]
     const { data } = await response.json();
     assertNoUserErrors(data?.metafieldsDelete?.userErrors);
   }
+}
+
+const BADGE_PRODUCTS = `#graphql
+  query BadgifyBadgeProducts($id: ID!) {
+    metaobject(id: $id) {
+      referencedBy(first: 250) {
+        pageInfo {
+          hasNextPage
+        }
+        nodes {
+          namespace
+          key
+          referencer {
+            ... on Product {
+              id
+              title
+            }
+          }
+        }
+      }
+    }
+  }`;
+
+/** Products whose `custom_badges.active_badge` metafield points at this badge. */
+export async function listBadgeProducts(
+  admin: AdminApiContext,
+  badgeId: string,
+): Promise<{ products: BadgeProduct[]; hasMore: boolean }> {
+  const response = await admin.graphql(BADGE_PRODUCTS, {
+    variables: { id: badgeId },
+  });
+  const { data } = await response.json();
+  const referencedBy = data?.metaobject?.referencedBy;
+
+  const products = (referencedBy?.nodes ?? [])
+    .filter(
+      (node: { namespace: string; key: string; referencer: { id?: string } }) =>
+        node.namespace === BADGE_NAMESPACE &&
+        node.key === BADGE_KEY &&
+        node.referencer?.id,
+    )
+    .map((node: { referencer: BadgeProduct }) => ({
+      id: node.referencer.id,
+      title: node.referencer.title,
+    }));
+
+  return { products, hasMore: referencedBy?.pageInfo.hasNextPage ?? false };
 }

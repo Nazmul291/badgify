@@ -22,7 +22,8 @@ import {
   unassignBadge,
 } from "../services/badges.server";
 import { DEFAULT_BADGE } from "../models/badge";
-import type { Badge, BadgeInput } from "../models/badge";
+import type { Badge, BadgeInput, BadgeProduct } from "../models/badge";
+import type { loader as badgeProductsLoader } from "./app.badge-products";
 
 type Intent = "save" | "delete" | "assign" | "unassign";
 
@@ -92,9 +93,9 @@ export const action = async ({
   const formData = await request.formData();
   const intent = String(formData.get("intent")) as Intent;
   const badgeId = String(formData.get("badgeId") ?? "") || null;
-  const productIds: string[] = JSON.parse(
-    String(formData.get("productIds") ?? "[]"),
-  );
+  const ids = (name: string): string[] =>
+    JSON.parse(String(formData.get(name) ?? "[]"));
+  const productIds = ids("productIds");
 
   try {
     switch (intent) {
@@ -103,8 +104,24 @@ export const action = async ({
         if (typeof input === "string") {
           return { ok: false, intent, error: input };
         }
-        await saveBadge(admin, badgeId, input);
-        return { ok: true, intent, message: badgeId ? "Badge updated" : "Badge created" };
+        const savedId = await saveBadge(admin, badgeId, input);
+
+        // Product changes made in the editor, applied after the badge exists
+        // so new badges can be assigned in the same save.
+        const addIds = ids("addProductIds");
+        const removeIds = ids("removeProductIds");
+        if (addIds.length) await assignBadge(admin, savedId, addIds);
+        if (removeIds.length) await unassignBadge(admin, removeIds);
+
+        const changes = [
+          addIds.length && `assigned to ${addIds.length} product(s)`,
+          removeIds.length && `removed from ${removeIds.length} product(s)`,
+        ].filter(Boolean);
+        return {
+          ok: true,
+          intent,
+          message: [badgeId ? "Badge updated" : "Badge created", ...changes].join(", "),
+        };
       }
       case "delete": {
         if (!badgeId) return { ok: false, intent, error: "Missing badge." };
@@ -193,6 +210,121 @@ function readForm(form: HTMLFormElement, fallback: BadgeInput): BadgeInput {
   };
 }
 
+interface ProductChanges {
+  addProductIds: string[];
+  removeProductIds: string[];
+}
+
+const VISIBLE_PRODUCT_CHIPS = 10;
+
+/**
+ * Tracks the editor's product selection against what's currently assigned,
+ * so saving only touches products that actually changed.
+ */
+function useBadgeProducts(badgeId: string | null) {
+  const shopify = useAppBridge();
+  const assignedFetcher = useFetcher<typeof badgeProductsLoader>();
+  const [selected, setSelected] = useState<BadgeProduct[] | null>(
+    badgeId ? null : [],
+  );
+
+  useEffect(() => {
+    if (badgeId) {
+      assignedFetcher.load(`/app/badge-products?id=${encodeURIComponent(badgeId)}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [badgeId]);
+
+  const assigned = assignedFetcher.data?.products ?? [];
+
+  useEffect(() => {
+    if (assignedFetcher.data) setSelected(assignedFetcher.data.products);
+  }, [assignedFetcher.data]);
+
+  const choose = async () => {
+    const selection = await shopify.resourcePicker({
+      type: "product",
+      multiple: true,
+      action: "select",
+      selectionIds: (selected ?? []).map(({ id }) => ({ id })),
+    });
+    // `undefined` means the merchant closed the picker without confirming.
+    if (selection) {
+      setSelected(selection.map(({ id, title }) => ({ id, title })));
+    }
+  };
+
+  const changes = (): ProductChanges => {
+    const before = new Set(assigned.map(({ id }) => id));
+    const after = new Set((selected ?? []).map(({ id }) => id));
+    return {
+      addProductIds: [...after].filter((id) => !before.has(id)),
+      removeProductIds: [...before].filter((id) => !after.has(id)),
+    };
+  };
+
+  return {
+    selected,
+    loading: selected === null,
+    hasMore: assignedFetcher.data?.hasMore ?? false,
+    choose,
+    changes,
+  };
+}
+
+function ProductsCard({
+  products,
+}: {
+  products: ReturnType<typeof useBadgeProducts>;
+}) {
+  const { selected, loading, hasMore, choose } = products;
+  const count = selected?.length ?? 0;
+  const hidden = count - VISIBLE_PRODUCT_CHIPS;
+
+  return (
+    <s-box padding="base" border="base" borderRadius="base">
+      <s-stack gap="base">
+        <s-stack direction="inline" justifyContent="space-between" alignItems="center">
+          <s-stack gap="small-300">
+            <s-heading>Products</s-heading>
+            <s-text color="subdued">
+              {loading
+                ? "Loading assigned products…"
+                : count === 0
+                  ? "Not assigned to any products"
+                  : `${count}${hasMore ? "+" : ""} product(s) selected`}
+            </s-text>
+          </s-stack>
+          <s-button onClick={choose} {...(loading ? { disabled: true } : {})}>
+            {count === 0 ? "Assign to products" : "Change products"}
+          </s-button>
+        </s-stack>
+
+        {loading && <s-spinner accessibilityLabel="Loading assigned products" />}
+
+        {count > 0 && (
+          <s-stack direction="inline" gap="small-200">
+            {selected!.slice(0, VISIBLE_PRODUCT_CHIPS).map((product) => (
+              <s-chip key={product.id}>{product.title}</s-chip>
+            ))}
+            {hidden > 0 && <s-chip>+{hidden} more</s-chip>}
+          </s-stack>
+        )}
+
+        <s-text color="subdued">
+          A product shows one badge at a time, so assigning this badge replaces
+          any other badge on the selected products. Changes apply when you save.
+        </s-text>
+        {hasMore && (
+          <s-text color="subdued">
+            Only the first 250 assigned products are shown here.
+          </s-text>
+        )}
+      </s-stack>
+    </s-box>
+  );
+}
+
 function BadgeEditor({
   badge,
   saving,
@@ -201,12 +333,13 @@ function BadgeEditor({
 }: {
   badge: Badge | null;
   saving: boolean;
-  onSave: (input: BadgeInput) => void;
+  onSave: (input: BadgeInput, changes: ProductChanges) => void;
   onCancel: () => void;
 }) {
   const initial = badge ?? DEFAULT_BADGE;
   const formRef = useRef<HTMLFormElement>(null);
   const [preview, setPreview] = useState<BadgeInput>(initial);
+  const products = useBadgeProducts(badge?.id ?? null);
 
   useEffect(() => {
     const form = formRef.current;
@@ -226,7 +359,7 @@ function BadgeEditor({
         ref={formRef}
         onSubmit={(event) => {
           event.preventDefault();
-          onSave(readForm(event.currentTarget, initial));
+          onSave(readForm(event.currentTarget, initial), products.changes());
         }}
       >
         <s-grid gridTemplateColumns="@container (inline-size > 640px) 2fr 1fr, 1fr" gap="large">
@@ -296,6 +429,10 @@ function BadgeEditor({
           </s-box>
         </s-grid>
 
+        <s-box paddingBlockStart="large">
+          <ProductsCard products={products} />
+        </s-box>
+
         <s-box paddingBlockStart="base">
           <s-stack direction="inline" gap="base" justifyContent="end">
             <s-button onClick={onCancel}>Cancel</s-button>
@@ -303,6 +440,7 @@ function BadgeEditor({
               type="submit"
               variant="primary"
               {...(saving ? { loading: true } : {})}
+              {...(products.loading ? { disabled: true } : {})}
             >
               Save badge
             </s-button>
@@ -382,13 +520,15 @@ export default function BadgesPage() {
           badge={editing}
           saving={submittingIntent === "save"}
           onCancel={() => setEditing(undefined)}
-          onSave={(input) =>
+          onSave={(input, { addProductIds, removeProductIds }) =>
             submit({
               intent: "save",
               badgeId: editing?.id ?? "",
               ...Object.fromEntries(
                 FIELD_NAMES.map((name) => [name, String(input[name])]),
               ),
+              addProductIds: JSON.stringify(addProductIds),
+              removeProductIds: JSON.stringify(removeProductIds),
             })
           }
         />

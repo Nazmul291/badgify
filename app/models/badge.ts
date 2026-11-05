@@ -27,3 +27,8 @@ export const DEFAULT_BADGE: BadgeInput = {
   paddingY: 4,
   cssCustom: "",
 };
+
+export interface BadgeProduct {
+  id: string;
+  title: string;
+}
