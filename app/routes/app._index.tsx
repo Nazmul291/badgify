@@ -21,8 +21,6 @@ import {
   unassignBadge,
 } from "../services/badges.server";
 import { BADGE_NUMBER_LIMITS, DEFAULT_BADGE, HEX_COLOR } from "../models/badge";
-import { BADGE_PRESETS } from "../models/presets";
-import type { BadgePreset } from "../models/presets";
 import { BadgePreview } from "../components/BadgePreview";
 import type { Badge, BadgeInput, BadgeProduct } from "../models/badge";
 import type { loader as badgeProductsLoader } from "./app.badge-products";
@@ -302,31 +300,6 @@ function ProductsCard({
   );
 }
 
-function PresetPicker({ onPick }: { onPick: (preset: BadgePreset) => void }) {
-  return (
-    <s-stack gap="small-200">
-      <s-text type="strong">Start from a template</s-text>
-      <s-stack direction="inline" gap="small-200">
-        {BADGE_PRESETS.map((preset) => (
-          <s-clickable
-            key={preset.id}
-            onClick={() => onPick(preset)}
-            padding="small"
-            border="base"
-            borderRadius="base"
-            accessibilityLabel={`Apply ${preset.name} template`}
-          >
-            <s-stack gap="small-300" alignItems="center">
-              <BadgePreview label={preset.values.label} style={preset.values} />
-              <s-text color="subdued">{preset.name}</s-text>
-            </s-stack>
-          </s-clickable>
-        ))}
-      </s-stack>
-    </s-stack>
-  );
-}
-
 function BadgeEditor({
   badge,
   saving,
@@ -342,18 +315,6 @@ function BadgeEditor({
   const formRef = useRef<HTMLFormElement>(null);
   const [preview, setPreview] = useState<BadgeInput>(initial);
   const products = useBadgeProducts(badge?.id ?? null);
-
-  // Fields are uncontrolled web components, so write preset values straight
-  // onto the elements, then refresh the preview from the form.
-  const applyPreset = (preset: BadgePreset) => {
-    const form = formRef.current;
-    if (!form) return;
-    for (const [name, value] of Object.entries(preset.values)) {
-      const field = form.querySelector(`[name="${name}"]`) as { value: string } | null;
-      if (field) field.value = String(value);
-    }
-    setPreview(readForm(form, initial));
-  };
 
   useEffect(() => {
     const form = formRef.current;
@@ -376,10 +337,6 @@ function BadgeEditor({
           onSave(readForm(event.currentTarget, initial), products.changes());
         }}
       >
-        <s-box paddingBlockEnd="large">
-          <PresetPicker onPick={applyPreset} />
-        </s-box>
-
         <s-grid gridTemplateColumns="@container (inline-size > 640px) 2fr 1fr, 1fr" gap="large">
           <s-stack gap="base">
             <s-text-field
